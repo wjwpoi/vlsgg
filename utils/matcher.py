@@ -46,9 +46,9 @@ class HungarianMatcher(nn.Module):
                  "labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of ground-truth
                            objects in the target) containing the class labels
                  "boxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates
-                 "image_id": Image index
-                 "orig_size": Tensor of dim [2] with the height and width
-                 "size": Tensor of dim [2] with the height and width after transformation
+                 //"image_id": Image index
+                 //"orig_size": Tensor of dim [2] with the height and width
+                 //"size": Tensor of dim [2] with the height and width after transformation
                  "rel_annotations": Tensor of dim [num_gt_triplet, 3] with the subject index/object index/predicate class
         Returns:
             A list of size batch_size, containing tuples of (index_i, index_j) where:
