@@ -96,7 +96,7 @@ args.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 idx_to_label, idx_to_predicate, label_list, predicate_list = load_vg_dict('/home/wjw/data/VG/VG-SGG-dicts-with-attri.json')
 processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
 tokenizer = AutoTokenizer.from_pretrained("roberta-base")
-model = SGGModel().to(args.device)
+model = SGGModel(args).to(args.device)
 
 tokenized_text = tokenizer(label_list + predicate_list, padding='longest')
 
@@ -108,6 +108,7 @@ tokenized_text = tokenizer(label_list + predicate_list, padding='longest')
 # dataset = dataset.with_format("torch")
 # train_dataloader = DataLoader(dataset['train'], batch_size=8, shuffle=True)
 # test_dataloader = DataLoader(dataset['test'], batch_size=32)
+
 dataset_train = build_dataset(image_set='train', args=args)
 dataset_val = build_dataset(image_set='val', args=args)
 sampler_train = torch.utils.data.RandomSampler(dataset_train)
@@ -125,11 +126,12 @@ total_epoch = 20
 
 for epoch in range(total_epoch):
     model.train()
-    with tqdm(total=len(train_dataloader)) as _tqdm:
+    with tqdm(total=len(data_loader_train)) as _tqdm:
         _tqdm.set_description('epoch: {}/{}'.format(epoch + 1, total_epoch))
-        for batch in train_dataloader:
-            inputs = {'pixel_values': batch['pixel_values'].to(device), 'pixel_mask': batch['pixel_mask'].to(device), 
-                      'input_ids': tokenized_text['input_ids'].to(device), 'attention_mask': tokenized_text['attention_mask'].to(device)}
+        for batch in data_loader_train:
+            print(1)
+            inputs = {'pixel_values': batch['pixel_values'].to(args.device), 'pixel_mask': batch['pixel_mask'].to(args.device), 
+                      'input_ids': tokenized_text['input_ids'].to(args.device), 'attention_mask': tokenized_text['attention_mask'].to(args.device)}
             
             optimizer.zero_grad()
             outputs = model(**inputs)

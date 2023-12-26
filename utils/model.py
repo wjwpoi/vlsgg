@@ -26,31 +26,30 @@ class ALIF(nn.Module):
 
 
 class SGGModel(nn.Module):
-    def __init__(self, roberta_model_name="roberta-large", ddetr_model_name="SenseTime/deformable-detr",
-                 embed_dim=256, hidden_dim=1024, num_heads=8, N_ALIF=2, num_queries=100):
+    def __init__(self, args):
         super().__init__()
-        self.num_queries = num_queries
+        self.num_queries = args.num_queries
         self.num_labels = 151
-        self.roberta_model = RobertaModel.from_pretrained(roberta_model_name)
-        self.ddetr_model = DeformableDetrModel.from_pretrained(ddetr_model_name)
-        self.ALIF = nn.ModuleList([ALIF(embed_dim, 1024, 8) for _ in range(N_ALIF)])
-        self.mha = nn.MultiheadAttention(embed_dim, num_heads, dropout=0.1, batch_first=True)
-        self.ffn = nn.Sequential(nn.Linear(embed_dim, hidden_dim),
+        self.roberta_model = RobertaModel.from_pretrained(args.roberta_model_name)
+        self.ddetr_model = DeformableDetrModel.from_pretrained(args.ddetr_model_name)
+        self.ALIF = nn.ModuleList([ALIF(args.ALIF_embed_dim, 1024, 8) for _ in range(args.N_ALIF)])
+        self.mha = nn.MultiheadAttention(args.embed_dim, args.num_heads, dropout=0.1, batch_first=True)
+        self.ffn = nn.Sequential(nn.Linear(args.embed_dim, args.hidden_dim),
                                      nn.ReLU(),
-                                     nn.Linear(hidden_dim, embed_dim))
-        self.queries = nn.Parameter(torch.Tensor(num_queries*2, embed_dim))
+                                     nn.Linear(args.hidden_dim, args.embed_dim))
+        self.queries = nn.Parameter(torch.Tensor(args.num_queries*2, args.embed_dim))
 
-        self.bbox_decoder = nn.Sequential(nn.Linear(embed_dim, hidden_dim),
+        self.bbox_decoder = nn.Sequential(nn.Linear(args.embed_dim, args.hidden_dim),
                                      nn.ReLU(),
-                                     nn.Linear(hidden_dim, hidden_dim),
+                                     nn.Linear(args.hidden_dim, args.hidden_dim),
                                      nn.ReLU(),
-                                     nn.Linear(hidden_dim, embed_dim))
-        self.label_decoder = nn.Sequential(nn.Linear(embed_dim, hidden_dim),
+                                     nn.Linear(args.hidden_dim, args.embed_dim))
+        self.label_decoder = nn.Sequential(nn.Linear(args.embed_dim, args.hidden_dim),
                                      nn.ReLU(),
-                                     nn.Linear(hidden_dim, embed_dim))
-        self.relation_decoder = nn.Sequential(nn.Linear(3 * embed_dim, hidden_dim),
+                                     nn.Linear(args.hidden_dim, args.embed_dim))
+        self.relation_decoder = nn.Sequential(nn.Linear(3 * args.embed_dim, args.hidden_dim),
                                      nn.ReLU(),
-                                     nn.Linear(hidden_dim, embed_dim))
+                                     nn.Linear(args.hidden_dim, args.embed_dim))
         
 
     def forward(self, pixel_values, pixel_mask, input_ids, attention_mask):
