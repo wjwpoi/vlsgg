@@ -1,11 +1,22 @@
 from transformers import AutoImageProcessor, AutoTokenizer
-from utils.misc import set_seed
 from utils.dataloader import load_data, load_vg_dict
 from utils.model import SGGModel
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import numpy as np
+import random
+import os
 import torch
 import torch.nn as nn
+
+
+def set_seed(seed_value):
+    np.random.seed(seed_value)
+    random.seed(seed_value)
+    os.environ['PYTHONHASHSEED'] = str(seed_value)  # 为了禁止hash随机化，使得实验可复现。
+
+    torch.manual_seed(seed_value)  # 为CPU设置随机种子
+    torch.cuda.manual_seed(seed_value)  # 为当前GPU设置随机种子（只用一块GPU）
 
 
 def pre_process(example):
