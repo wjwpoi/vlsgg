@@ -64,7 +64,7 @@ def load_data(dataset="vg", path='/home/wjw/data/'):
 
 
                     img_list.append(image)
-                    label_dict = {'labels': label, 'boxes': box, 'rel_annotations': rel_annotations}
+                    label_dict = {'labels': label.squeeze(), 'boxes': box, 'rel_annotations': rel_annotations}
                     label_list.append(label_dict)
 
                     split_list.append(f['split'][i])

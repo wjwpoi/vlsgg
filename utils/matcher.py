@@ -70,13 +70,13 @@ class HungarianMatcher(nn.Module):
         out_bbox = outputs["pred_boxes"].flatten(0, 1)
 
         # Also concat the target labels and boxes
-        tgt_ids = torch.cat([v["labels"] for v in targets])
+        tgt_ids = torch.cat([v["labels"] for v in targets])#.squeeze()
         tgt_bbox = torch.cat([v["boxes"] for v in targets])
 
         # Compute the entity classification cost. We borrow the cost function from Deformable DETR (https://arxiv.org/abs/2010.04159)
         neg_cost_class = (1 - alpha) * (out_prob ** gamma) * (-(1 - out_prob + 1e-8).log())
         pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-(out_prob + 1e-8).log())
-        cost_class = (pos_cost_class[:, tgt_ids] - neg_cost_class[:, tgt_ids]).squeeze()
+        cost_class = (pos_cost_class[:, tgt_ids] - neg_cost_class[:, tgt_ids])
 
         # Compute the L1 cost between entity boxes
         cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
@@ -93,9 +93,9 @@ class HungarianMatcher(nn.Module):
 
         # Concat the subject/object/predicate labels and subject/object boxes
         sub_tgt_bbox = torch.cat([v['boxes'][v['rel_annotations'][:, 0]] for v in targets])
-        sub_tgt_ids = torch.cat([v['labels'][v['rel_annotations'][:, 0]] for v in targets]).squeeze()
+        sub_tgt_ids = torch.cat([v['labels'][v['rel_annotations'][:, 0]] for v in targets])#.squeeze()
         obj_tgt_bbox = torch.cat([v['boxes'][v['rel_annotations'][:, 1]] for v in targets])
-        obj_tgt_ids = torch.cat([v['labels'][v['rel_annotations'][:, 1]] for v in targets]).squeeze()
+        obj_tgt_ids = torch.cat([v['labels'][v['rel_annotations'][:, 1]] for v in targets])#.squeeze()
         rel_tgt_ids = torch.cat([v["rel_annotations"][:, 2] for v in targets])
 
         sub_prob = outputs["sub_logits"].flatten(0, 1).sigmoid()

@@ -4,7 +4,7 @@ from transformers.models.roberta.modeling_roberta import RobertaLayer
 from utils.misc import accuracy, get_world_size, is_dist_avail_and_initialized
 import torch.nn as nn
 import torch
-import torch.functional as F
+import torch.nn.functional as F
 import utils.box_ops as box_ops
 from transformers.models.deformable_detr.configuration_deformable_detr import DeformableDetrConfig
 
@@ -118,13 +118,15 @@ class SetCriterion(nn.Module):
         self.weight_dict = weight_dict
         self.eos_coef = eos_coef
         self.losses = losses
-        empty_weight = torch.ones(self.num_classes + 1)
-        empty_weight[-1] = self.eos_coef
+        # empty_weight = torch.ones(self.num_classes + 1)
+        # empty_weight[-1] = self.eos_coef
+        empty_weight = torch.ones(self.num_classes)
+        empty_weight[0] = self.eos_coef
         self.register_buffer('empty_weight', empty_weight)
 
-        self.num_rel_classes = 51 if num_classes == 151 else 31 # Using entity class numbers to adapt rel class numbers
-        empty_weight_rel = torch.ones(num_rel_classes+1)
-        empty_weight_rel[-1] = self.eos_coef
+        self.num_rel_classes = num_rel_classes
+        empty_weight_rel = torch.ones(self.num_rel_classes)
+        empty_weight_rel[0] = self.eos_coef
         self.register_buffer('empty_weight_rel', empty_weight_rel)
 
     def loss_labels(self, outputs, targets, indices, num_boxes, log=True):
@@ -136,7 +138,7 @@ class SetCriterion(nn.Module):
 
         idx = self._get_src_permutation_idx(indices[0])
         target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices[0])])
-        target_classes = torch.full(pred_logits.shape[:2], self.num_classes, dtype=torch.int64, device=pred_logits.device)
+        target_classes = torch.full(pred_logits.shape[:2], 0, dtype=torch.int64, device=pred_logits.device)
         target_classes[idx] = target_classes_o
 
         sub_logits = outputs['sub_logits']
@@ -146,8 +148,8 @@ class SetCriterion(nn.Module):
         target_rels_classes_o = torch.cat([t["labels"][t["rel_annotations"][J, 0]] for t, (_, J) in zip(targets, indices[1])])
         target_relo_classes_o = torch.cat([t["labels"][t["rel_annotations"][J, 1]] for t, (_, J) in zip(targets, indices[1])])
 
-        target_sub_classes = torch.full(sub_logits.shape[:2], self.num_classes, dtype=torch.int64, device=sub_logits.device)
-        target_obj_classes = torch.full(obj_logits.shape[:2], self.num_classes, dtype=torch.int64, device=obj_logits.device)
+        target_sub_classes = torch.full(sub_logits.shape[:2], 0, dtype=torch.int64, device=sub_logits.device)
+        target_obj_classes = torch.full(obj_logits.shape[:2], 0, dtype=torch.int64, device=obj_logits.device)
 
         target_sub_classes[rel_idx] = target_rels_classes_o
         target_obj_classes[rel_idx] = target_relo_classes_o
@@ -218,7 +220,7 @@ class SetCriterion(nn.Module):
         src_logits = outputs['rel_logits']
         idx = self._get_src_permutation_idx(indices[1])
         target_classes_o = torch.cat([t["rel_annotations"][J,2] for t, (_, J) in zip(targets, indices[1])])
-        target_classes = torch.full(src_logits.shape[:2], self.num_rel_classes, dtype=torch.int64, device=src_logits.device)
+        target_classes = torch.full(src_logits.shape[:2], 0, dtype=torch.int64, device=src_logits.device)
         target_classes[idx] = target_classes_o
 
         loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight_rel)

@@ -11,6 +11,8 @@ import os
 import torch
 import torch.nn as nn
 
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+
 
 def set_seed(seed_value):
     np.random.seed(seed_value)
