@@ -37,10 +37,7 @@ def load_data(dataset="vg", path='/home/wjw/data/'):
                 image_data = json.load(f)
 
             img_list = []
-            target_list = []
-            bbox_list = []
-            predicate_list = []
-            relationship_list = []
+            label_list = []
             split_list = []
             with h5py.File(path + "VG-SGG-with-attri.h5", 'r') as f:
                 i = 0
@@ -51,28 +48,31 @@ def load_data(dataset="vg", path='/home/wjw/data/'):
                     if image_id in corrupted_imgs:
                         continue
 
-                    i += 1
                     image = path + 'VG_100K/' + image_id + '.jpg'
                     box = f['boxes_512'][f['img_to_first_box'][i]: f['img_to_last_box'][i] + 1]
                     scale = max(width, height) / 512
                     box = box * scale / np.array([width, height, width, height])  # normalize
 
                     label = f['labels'][f['img_to_first_box'][i]: f['img_to_last_box'][i] + 1]
-                    predicate = f['predicates'][f['img_to_first_rel'][i]: f['img_to_last_rel'][i] + 1]
-                    relationship = f['relationships'][f['img_to_first_rel'][i]: f['img_to_last_rel'][i] + 1]
+                    predicates = f['predicates'][f['img_to_first_rel'][i]: f['img_to_last_rel'][i] + 1]
+                    relationships = f['relationships'][f['img_to_first_rel'][i]: f['img_to_last_rel'][i] + 1] - f['img_to_first_box'][i]
+
+                    i += 1
+                    rel_annotations = np.concatenate((relationships, predicates), axis=-1)
+                    if rel_annotations.size == 0:  # no relation, pass this picture
+                        continue
+
 
                     img_list.append(image)
-                    target_list.append(label)
-                    bbox_list.append(box)
-                    predicate_list.append(predicate)
-                    relationship_list.append(relationship)
+                    label_dict = {'labels': label, 'boxes': box, 'rel_annotations': rel_annotations}
+                    label_list.append(label_dict)
+
                     split_list.append(f['split'][i])
                     
                     if i >= 256:
                         break
 
-        list_dict = {'image': img_list, 'target': target_list, 'bbox': bbox_list, 
-                     'predicate': predicate_list, 'relationship': relationship_list, 'split': split_list}
+        list_dict = {'image': img_list, 'label': label_list, 'split': split_list}
         dataset = Dataset.from_dict(list_dict).cast_column('image', Image())
 
         train_dataset = dataset.filter(lambda example: example['split'] == 0).remove_columns(["split"])

@@ -7,7 +7,7 @@ import torch
 from scipy.optimize import linear_sum_assignment
 from torch import nn
 
-from utils.matcher import box_cxcywh_to_xyxy, generalized_box_iou, box_iou
+from utils.box_ops import box_cxcywh_to_xyxy, generalized_box_iou, box_iou
 
 
 class HungarianMatcher(nn.Module):
@@ -76,7 +76,7 @@ class HungarianMatcher(nn.Module):
         # Compute the entity classification cost. We borrow the cost function from Deformable DETR (https://arxiv.org/abs/2010.04159)
         neg_cost_class = (1 - alpha) * (out_prob ** gamma) * (-(1 - out_prob + 1e-8).log())
         pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-(out_prob + 1e-8).log())
-        cost_class = pos_cost_class[:, tgt_ids] - neg_cost_class[:, tgt_ids]
+        cost_class = (pos_cost_class[:, tgt_ids] - neg_cost_class[:, tgt_ids]).squeeze()
 
         # Compute the L1 cost between entity boxes
         cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
@@ -93,9 +93,9 @@ class HungarianMatcher(nn.Module):
 
         # Concat the subject/object/predicate labels and subject/object boxes
         sub_tgt_bbox = torch.cat([v['boxes'][v['rel_annotations'][:, 0]] for v in targets])
-        sub_tgt_ids = torch.cat([v['labels'][v['rel_annotations'][:, 0]] for v in targets])
+        sub_tgt_ids = torch.cat([v['labels'][v['rel_annotations'][:, 0]] for v in targets]).squeeze()
         obj_tgt_bbox = torch.cat([v['boxes'][v['rel_annotations'][:, 1]] for v in targets])
-        obj_tgt_ids = torch.cat([v['labels'][v['rel_annotations'][:, 1]] for v in targets])
+        obj_tgt_ids = torch.cat([v['labels'][v['rel_annotations'][:, 1]] for v in targets]).squeeze()
         rel_tgt_ids = torch.cat([v["rel_annotations"][:, 2] for v in targets])
 
         sub_prob = outputs["sub_logits"].flatten(0, 1).sigmoid()
@@ -134,14 +134,14 @@ class HungarianMatcher(nn.Module):
 
         # assignment strategy to avoid assigning <background-no_relationship-background > to some good predictions
         sub_weight = torch.ones((bs, num_queries_rel)).to(out_prob.device)
-        good_sub_detection = torch.logical_and((outputs["sub_logits"].flatten(0, 1)[:, :-1].argmax(-1)[:, None] == tgt_ids),
+        good_sub_detection = torch.logical_and((outputs["sub_logits"].flatten(0, 1)[:, 0:].argmax(-1)[:, None] == tgt_ids),
                                                (box_iou(box_cxcywh_to_xyxy(sub_bbox), box_cxcywh_to_xyxy(tgt_bbox))[0] >= self.iou_threshold))
         for i, c in enumerate(good_sub_detection.split(sizes, -1)):
             sub_weight[i, c.sum(-1)[i*num_queries_rel:(i+1)*num_queries_rel].to(torch.bool)] = 0
             sub_weight[i, indices1[i][0]] = 1
 
         obj_weight = torch.ones((bs, num_queries_rel)).to(out_prob.device)
-        good_obj_detection = torch.logical_and((outputs["obj_logits"].flatten(0, 1)[:, :-1].argmax(-1)[:, None] == tgt_ids),
+        good_obj_detection = torch.logical_and((outputs["obj_logits"].flatten(0, 1)[:, 0:].argmax(-1)[:, None] == tgt_ids),
                                                (box_iou(box_cxcywh_to_xyxy(obj_bbox), box_cxcywh_to_xyxy(tgt_bbox))[0] >= self.iou_threshold))
         for i, c in enumerate(good_obj_detection.split(sizes, -1)):
             obj_weight[i, c.sum(-1)[i*num_queries_rel:(i+1)*num_queries_rel].to(torch.bool)] = 0
