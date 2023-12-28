@@ -56,6 +56,7 @@ def load_data(dataset="vg", path='/home/wjw/data/'):
                     label = f['labels'][f['img_to_first_box'][i]: f['img_to_last_box'][i] + 1]
                     predicates = f['predicates'][f['img_to_first_rel'][i]: f['img_to_last_rel'][i] + 1]
                     relationships = f['relationships'][f['img_to_first_rel'][i]: f['img_to_last_rel'][i] + 1] - f['img_to_first_box'][i]
+                    split = f['split'][i]
 
                     i += 1
                     rel_annotations = np.concatenate((relationships, predicates), axis=-1)
@@ -65,7 +66,7 @@ def load_data(dataset="vg", path='/home/wjw/data/'):
                     img_list.append(image)
                     label_dict = {'labels': label.squeeze(), 'boxes': box, 'rel_annotations': rel_annotations}
                     label_list.append(label_dict)
-                    split_list.append(f['split'][i])
+                    split_list.append(split)
                     
                     # if i >= 256:
                     #     break

@@ -56,7 +56,7 @@ dataset = load_data(dataset_name, path='/home/wjw/data/')
 # dataset = dataset['train'].train_test_split(test_size=0.3)  ######## 
 
 length = sum(dataset.num_rows.values())
-# dataset = dataset.remove_columns(["target", 'bbox', 'predicate', 'relationship'])
+
 dataset = dataset.map(pre_process, writer_batch_size=512)
 dataset = dataset.remove_columns(["image"])
 dataset = dataset.with_format("torch")
