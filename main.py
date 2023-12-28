@@ -10,6 +10,7 @@ import random
 import os
 import torch
 import torch.nn as nn
+from dataset import build_dataset, get_coco_api_from_dataset
 
 
 def set_seed(seed_value):
@@ -52,8 +53,11 @@ model = SGGModel(roberta_model_name="roberta-large", ddetr_model_name="SenseTime
 tokenized_text = tokenizer(label_list + predicate_list, padding='max_length', max_length=8)
 tokenized_text = {k: torch.tensor(v).to(device) for k, v in tokenized_text.items()}
 
-dataset = load_data(dataset_name, path='/home/wjw/data/')
+# dataset = load_data(dataset_name, path='/home/wjw/data/')
 # dataset = dataset['train'].train_test_split(test_size=0.3)  ######## 
+
+dataset_train = build_dataset('train', dataset_name, '/home/wjw/data/VG/', '/home/wjw/data/VG/VG_100K/')
+dataset_val = build_dataset('val', dataset_name, '/home/wjw/data/VG/', '/home/wjw/data/VG/VG_100K/')
 
 length = sum(dataset.num_rows.values())
 
