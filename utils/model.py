@@ -38,6 +38,7 @@ class SGGModel(nn.Module):
         self.num_labels = 151
         self.roberta_model = RobertaModel.from_pretrained(roberta_model_name)
         self.ddetr_model = DeformableDetrModel.from_pretrained(ddetr_model_name)
+        self.ddetr_model.freeze_backbone()
 
         self.text_project = nn.Linear(self.roberta_model.config.hidden_size, embed_dim)
         self.image_project = nn.Linear(self.ddetr_model.config.hidden_size, embed_dim)
@@ -93,6 +94,43 @@ class SGGModel(nn.Module):
         #        'rel_logits': relation_logit[i]} for i in range(batch_size)]
 
         return out
+    
+    def evaluate(self, outputs, targets, matcher=None, recall_all=[0, 0, 0], topk=[20, 50, 100]):
+        entity_indices, rel_indices, _, _= matcher(outputs, targets)
+        pred_rel = outputs['rel_logits'].argmax(-1)
+        pred_sub = outputs['sub_logits'].argmax(-1)
+        pred_obj = outputs['obj_logits'].argmax(-1)
+        pred_sub_box = outputs['sub_boxes']
+        pred_obj_box = outputs['obj_boxes']
+
+        for i, rel_index in enumerate(rel_indices):
+            target = targets[i]
+            pred_rel_index, gt_rel_index = rel_index
+            gt_rel_annotations = target['rel_annotations'][gt_rel_index]
+            sub_label = (target['labels'][gt_rel_annotations[:, 0]] == pred_sub[i][pred_rel_index]).to('cpu')
+            obj_label = (target['labels'][gt_rel_annotations[:, 1]] == pred_obj[i][pred_rel_index]).to('cpu')
+            # sub_box = (target['boxes'][gt_rel_annotations[:, 0]] == pred_sub_box[i][pred_rel_index])
+            # obj_box = (target['boxes'][gt_rel_annotations[:, 1]] == pred_obj_box[i][pred_rel_index])
+            sub_box, _ = box_ops.box_iou(box_ops.box_cxcywh_to_xyxy(target['boxes'][gt_rel_annotations[:, 0]]),
+                                          box_ops.box_cxcywh_to_xyxy(pred_sub_box[i][pred_rel_index]))
+            obj_box, _ = box_ops.box_iou(box_ops.box_cxcywh_to_xyxy(target['boxes'][gt_rel_annotations[:, 1]]),
+                                          box_ops.box_cxcywh_to_xyxy(pred_obj_box[i][pred_rel_index]))
+            sub_box = (sub_box >= 0.5).squeeze(0).to('cpu')
+            obj_box = (obj_box >= 0.5).squeeze(0).to('cpu')
+            rel_label = (gt_rel_annotations[:, 2] == pred_rel[i][pred_rel_index]).to('cpu')
+            result = logical_ands((sub_label, obj_label, sub_box, obj_box, rel_label))
+            for i in range(len(topk)):
+                recall_all[i] += (result[: topk[i]] == True).sum() / len(gt_rel_annotations)
+        return recall_all
+    
+
+def logical_ands(and_list):  # extend torch.logical_and to more than two inputs
+    assert len(and_list) >= 2
+    result = and_list[0]
+    for i in range(1, len(and_list)):
+        result = torch.logical_and(result, and_list[i])
+    return result
+    
     
     
     
@@ -290,7 +328,7 @@ class SetCriterion(nn.Module):
                     l_dict = {k + f'_{i}': v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
-        return losses    
+        return losses
         
 
         

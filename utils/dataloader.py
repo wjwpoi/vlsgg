@@ -62,15 +62,13 @@ def load_data(dataset="vg", path='/home/wjw/data/'):
                     if rel_annotations.size == 0:  # no relation, pass this picture
                         continue
 
-
                     img_list.append(image)
                     label_dict = {'labels': label.squeeze(), 'boxes': box, 'rel_annotations': rel_annotations}
                     label_list.append(label_dict)
-
                     split_list.append(f['split'][i])
                     
-                    if i >= 256:
-                        break
+                    # if i >= 256:
+                    #     break
 
         list_dict = {'image': img_list, 'label': label_list, 'split': split_list}
         dataset = Dataset.from_dict(list_dict).cast_column('image', Image())
