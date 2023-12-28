@@ -68,8 +68,8 @@ def load_data(dataset="vg", path='/home/wjw/data/'):
                     label_list.append(label_dict)
                     split_list.append(split)
                     
-                    # if i >= 256:
-                    #     break
+                    if i >= 256:
+                        break
 
         list_dict = {'image': img_list, 'label': label_list, 'split': split_list}
         dataset = Dataset.from_dict(list_dict).cast_column('image', Image())
