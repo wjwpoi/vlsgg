@@ -27,14 +27,6 @@ def pre_process(example):
     return example
 
 
-def collate_fn(batch):
-    pixel_values = [x['pixel_values'].to(device) for x in batch]
-    pixel_mask = [x['pixel_mask'].to(device) for x in batch]
-    label = [{k: v.to(device) for k, v in x['label'].items()} for x in batch]
-    batch = {'pixel_values': torch.concat(pixel_values), 'pixel_mask': torch.concat(pixel_mask), 'label': label}
-    return batch
-
-
 dataset_name = 'vg'
 num_classes = 151 if dataset_name != 'oi' else 289 # some entity categories in OIV6 are deactivated.
 num_rel_classes = 51 if dataset_name != 'oi' else 31
@@ -59,13 +51,8 @@ tokenized_text = {k: torch.tensor(v).to(device) for k, v in tokenized_text.items
 dataset_train = build_dataset('train', dataset_name, '/home/wjw/data/VG/', '/home/wjw/data/VG/VG_100K/')
 dataset_val = build_dataset('val', dataset_name, '/home/wjw/data/VG/', '/home/wjw/data/VG/VG_100K/')
 
-length = sum(dataset.num_rows.values())
-
-dataset = dataset.map(pre_process, writer_batch_size=512)
-dataset = dataset.remove_columns(["image"])
-dataset = dataset.with_format("torch")
-train_dataloader = DataLoader(dataset['train'], batch_size=2, shuffle=True, collate_fn=collate_fn)
-test_dataloader = DataLoader(dataset['test'], batch_size=4, collate_fn=collate_fn)
+train_dataloader = DataLoader(dataset_train, batch_size=2, shuffle=True, collate_fn=collate_fn)
+val_dataloader = DataLoader(dataset_val, batch_size=1, collate_fn=collate_fn)
 
 matcher = HungarianMatcher(cost_class=1, cost_bbox=5, cost_giou=2, iou_threshold=0.7)
 criterion = SetCriterion(num_classes, num_rel_classes, matcher=matcher, weight_dict=weight_dict,
@@ -81,12 +68,12 @@ for epoch in range(total_epoch):
     with tqdm(total=len(train_dataloader)) as _tqdm:
         _tqdm.set_description('epoch: {}/{}'.format(epoch + 1, total_epoch))
         for batch in train_dataloader:
-            inputs = {'pixel_values': batch['pixel_values'], 'pixel_mask': batch['pixel_mask'], 
+            inputs = {'nested_pixel_values': batch[0].to(device), 
                       'input_ids': tokenized_text['input_ids'], 'attention_mask': tokenized_text['attention_mask']}
             
             optimizer.zero_grad()
             outputs = model(**inputs)
-            targets = batch['label']
+            targets = targets = [{k: v.to(device) for k, v in t.items()} for t in batch[1]]
             loss_dict = criterion(outputs, targets)
             loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
 
@@ -100,10 +87,15 @@ for epoch in range(total_epoch):
     if epoch % 5 == 0:
         model.eval()
         recall_all = [0] * 3
-        for batch in test_dataloader:
+        print('########## START TEST #########')
+        for batch in tqdm(val_dataloader):
+            inputs = {'nested_pixel_values': batch[0].to(device), 
+                    'input_ids': tokenized_text['input_ids'], 'attention_mask': tokenized_text['attention_mask']}
+            outputs = model(**inputs)
+            targets = targets = [{k: v.to(device) for k, v in t.items()} for t in batch[1]]
             recall_all = model.evaluate(outputs, targets, matcher, recall_all)
 
-        recall_all = [float(recall/length) for recall in recall_all]
+        recall_all = [float(recall/len(dataset_val)) for recall in recall_all]
         print(recall_all)
 
 

@@ -66,9 +66,9 @@ class SGGModel(nn.Module):
                                      nn.Linear(hidden_dim, embed_dim))
         
 
-    def forward(self, pixel_values, pixel_mask, input_ids, attention_mask):
-        batch_size = pixel_values.shape[0]
-        image_embeds = self.ddetr_model(pixel_values=pixel_values, pixel_mask=pixel_mask).encoder_last_hidden_state
+    def forward(self, nested_pixel_values, input_ids, attention_mask):
+        batch_size = nested_pixel_values.tensors.shape[0]
+        image_embeds = self.ddetr_model(pixel_values=nested_pixel_values.tensors, pixel_mask=nested_pixel_values.mask).encoder_last_hidden_state
         text_embeds = self.roberta_model(input_ids=input_ids, attention_mask=attention_mask).pooler_output
 
         text_embeds = self.text_project(text_embeds).repeat(batch_size, 1, 1)
