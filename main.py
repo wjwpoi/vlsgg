@@ -55,8 +55,6 @@ tokenized_text = {k: torch.tensor(v).to(device) for k, v in tokenized_text.items
 dataset = load_data(dataset_name, path='/home/wjw/data/')
 # dataset = dataset['train'].train_test_split(test_size=0.3)  ######## 
 
-length = sum(dataset.num_rows.values())
-
 dataset = dataset.map(pre_process, writer_batch_size=512)
 dataset = dataset.remove_columns(["image"])
 dataset = dataset.with_format("torch")
@@ -96,10 +94,15 @@ for epoch in range(total_epoch):
     if epoch % 5 == 0:
         model.eval()
         recall_all = [0] * 3
-        for batch in test_dataloader:
+        print("########## START TEST ##########")
+        for batch in tqdm(test_dataloader):
+            inputs = {'pixel_values': batch['pixel_values'], 'pixel_mask': batch['pixel_mask'], 
+                      'input_ids': tokenized_text['input_ids'], 'attention_mask': tokenized_text['attention_mask']}
+            outputs = model(**inputs)
+            targets = batch['label']
             recall_all = model.evaluate(outputs, targets, matcher, recall_all)
 
-        recall_all = [float(recall/length) for recall in recall_all]
+        recall_all = [float(recall/len(dataset['test'])) for recall in recall_all]
         print(recall_all)
 
 
