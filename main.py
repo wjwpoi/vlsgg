@@ -67,7 +67,8 @@ for epoch in range(total_epoch):
     model.train()
     with tqdm(total=len(train_dataloader)) as _tqdm:
         _tqdm.set_description('epoch: {}/{}'.format(epoch + 1, total_epoch))
-        for batch in train_dataloader:
+        mean_loss = 0
+        for num, batch in enumerate(train_dataloader):
             inputs = {'nested_pixel_values': batch[0].to(device), 
                       'input_ids': tokenized_text['input_ids'], 'attention_mask': tokenized_text['attention_mask']}
             
@@ -80,7 +81,8 @@ for epoch in range(total_epoch):
             loss.backward()
             optimizer.step()
 
-            _tqdm.set_postfix(loss='{:.4f}'.format(loss.item()))
+            mean_loss += loss.item()
+            _tqdm.set_postfix(loss='{:.4f}'.format(loss.item()), mean_loss='{:.4f}'.format(mean_loss/(num+1)))
             _tqdm.update(1)
     
     torch.save(model, "/home/wjw/checkpoints/model.pt")
