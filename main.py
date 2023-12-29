@@ -39,8 +39,8 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 idx_to_label, idx_to_predicate, label_list, predicate_list = load_vg_dict('/home/wjw/data/VG/VG-SGG-dicts-with-attri.json')
 processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
 tokenizer = AutoTokenizer.from_pretrained("roberta-base")
-model = SGGModel(roberta_model_name="roberta-large", ddetr_model_name="SenseTime/deformable-detr",
-                 embed_dim=256, hidden_dim=512, num_heads=8, N_ALIF=2, num_queries=100).to(device)
+model = SGGModel(roberta_model_name="roberta-base", ddetr_model_name="SenseTime/deformable-detr",
+                 embed_dim=256, hidden_dim=256, num_heads=4, N_ALIF=2, num_queries=100).to(device)
 
 tokenized_text = tokenizer(label_list + predicate_list, padding='max_length', max_length=8)
 tokenized_text = {k: torch.tensor(v).to(device) for k, v in tokenized_text.items()}
@@ -59,9 +59,9 @@ criterion = SetCriterion(num_classes, num_rel_classes, matcher=matcher, weight_d
                              eos_coef=0.1, losses=['labels', 'boxes', 'cardinality', "relations"]).to(device)
 
 
-optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
 # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.8, last_epoch=-1)
-total_epoch = 50
+total_epoch = 20
 
 for epoch in range(total_epoch):
     model.train()
@@ -73,7 +73,7 @@ for epoch in range(total_epoch):
             
             optimizer.zero_grad()
             outputs = model(**inputs)
-            targets = targets = [{k: v.to(device) for k, v in t.items()} for t in batch[1]]
+            targets = [{k: v.to(device) for k, v in t.items()} for t in batch[1]]
             loss_dict = criterion(outputs, targets)
             loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
 
@@ -82,22 +82,20 @@ for epoch in range(total_epoch):
 
             _tqdm.set_postfix(loss='{:.4f}'.format(loss.item()))
             _tqdm.update(1)
-
+    
+    torch.save(model, "/home/wjw/checkpoints/model.pt")
         
-    if epoch % 5 == 0:
+    if (epoch + 1) % 5 == 0 or epoch == 0 or 1:
         model.eval()
+        criterion.eval()
         recall_all = [0] * 3
-        print('########## START TEST #########')
+        print('########## START TEST ##########')
         for batch in tqdm(val_dataloader):
             inputs = {'nested_pixel_values': batch[0].to(device), 
                     'input_ids': tokenized_text['input_ids'], 'attention_mask': tokenized_text['attention_mask']}
             outputs = model(**inputs)
-            targets = targets = [{k: v.to(device) for k, v in t.items()} for t in batch[1]]
+            targets = [{k: v.to(device) for k, v in t.items()} for t in batch[1]]
             recall_all = model.evaluate(outputs, targets, matcher, recall_all)
 
         recall_all = [float(recall/len(dataset_val)) for recall in recall_all]
         print(recall_all)
-
-
-            
-

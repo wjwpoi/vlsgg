@@ -39,11 +39,14 @@ class SGGModel(nn.Module):
         self.roberta_model = RobertaModel.from_pretrained(roberta_model_name)
         self.ddetr_model = DeformableDetrModel.from_pretrained(ddetr_model_name)
         self.ddetr_model.freeze_backbone()
+        
+        for _, param in self.roberta_model.named_parameters():
+            param.requires_grad_(False)
 
         self.text_project = nn.Linear(self.roberta_model.config.hidden_size, embed_dim)
         self.image_project = nn.Linear(self.ddetr_model.config.hidden_size, embed_dim)
 
-        self.ALIF = ALIF(embed_dim, 512, 8)
+        # self.ALIF = ALIF(embed_dim, 512, 8)
         self.mha = nn.MultiheadAttention(embed_dim, num_heads, dropout=0.1, batch_first=True)
         self.ffn = nn.Sequential(nn.Linear(embed_dim, hidden_dim),
                                      nn.ReLU(),
@@ -64,7 +67,6 @@ class SGGModel(nn.Module):
         self.relation_decoder = nn.Sequential(nn.Linear(2 * embed_dim, hidden_dim),
                                      nn.ReLU(),
                                      nn.Linear(hidden_dim, embed_dim))
-        
 
     def forward(self, nested_pixel_values, input_ids, attention_mask):
         batch_size = nested_pixel_values.tensors.shape[0]
@@ -72,7 +74,7 @@ class SGGModel(nn.Module):
         text_embeds = self.roberta_model(input_ids=input_ids, attention_mask=attention_mask).pooler_output
 
         text_embeds = self.text_project(text_embeds).repeat(batch_size, 1, 1)
-        image_embeds, text_embeds = self.ALIF(image_embeds, text_embeds)
+        # image_embeds, text_embeds = self.ALIF(image_embeds, text_embeds)
 
         target_embeds = self.ffn(self.mha(self.queries.repeat(batch_size,1,1), image_embeds, image_embeds, need_weights=False)[0])
         target_bbox = self.bbox_decoder(target_embeds).sigmoid()
@@ -329,8 +331,3 @@ class SetCriterion(nn.Module):
                     losses.update(l_dict)
 
         return losses
-        
-
-        
-
-
