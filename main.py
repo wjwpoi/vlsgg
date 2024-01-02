@@ -101,3 +101,4 @@ for epoch in range(total_epoch):
 
         recall_all = [float(recall/len(dataset_val)) for recall in recall_all]
         print(recall_all)
+
