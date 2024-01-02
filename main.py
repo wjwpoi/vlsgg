@@ -88,7 +88,8 @@ for epoch in range(total_epoch):
             optimizer.step()
 
             mean_loss += loss.item()
-            _tqdm.set_postfix(loss='{:.4f}'.format(loss.item()), mean_loss='{:.4f}'.format(mean_loss/(num+1)))
+            if num % 10 == 0:
+                _tqdm.set_postfix(loss='{:.4f}'.format(loss.item()), mean_loss='{:.4f}'.format(mean_loss/(num+1)))
             _tqdm.update(1)
     
     torch.save(model, "/home/wjw/checkpoints/model.pt")
