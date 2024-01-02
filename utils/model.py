@@ -132,8 +132,6 @@ def logical_ands(and_list):  # extend torch.logical_and to more than two inputs
     return result
     
     
-    
-    
 class SetCriterion(nn.Module):
     """ This class computes the loss for model.
         COPY from RelTR.
