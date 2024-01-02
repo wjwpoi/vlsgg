@@ -36,10 +36,13 @@ weight_dict = {'loss_ce': 1, 'loss_bbox': 5, 'loss_giou': 2, 'loss_rel': 1}
 set_seed(621)
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
+image_model = "/home/wjw/checkpoints/weight/deformable-detr"
+text_model = "/home/wjw/checkpoints/weight/roberta-base"
+
 idx_to_label, idx_to_predicate, label_list, predicate_list = load_vg_dict('/home/wjw/data/VG/VG-SGG-dicts-with-attri.json')
-processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
-tokenizer = AutoTokenizer.from_pretrained("roberta-base")
-model = SGGModel(roberta_model_name="roberta-base", ddetr_model_name="SenseTime/deformable-detr",
+processor = AutoImageProcessor.from_pretrained(image_model)
+tokenizer = AutoTokenizer.from_pretrained(text_model)
+model = SGGModel(roberta_model_name=text_model, ddetr_model_name=image_model,
                  embed_dim=256, hidden_dim=256, num_heads=4, N_ALIF=2, num_queries=100).to(device)
 
 tokenized_text = tokenizer(label_list + predicate_list, padding='max_length', max_length=8)
