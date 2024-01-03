@@ -1,6 +1,4 @@
-from transformers import DeformableDetrModel, RobertaModel, RobertaConfig, DeformableDetrConfig
-from transformers.models.deformable_detr.modeling_deformable_detr import DeformableDetrEncoderLayer, DeformableDetrDecoderLayer
-from transformers.models.roberta.modeling_roberta import RobertaLayer
+from transformers import DeformableDetrModel
 from utils.misc import accuracy, get_world_size, is_dist_avail_and_initialized
 import torch.nn as nn
 import torch
@@ -9,44 +7,18 @@ import utils.box_ops as box_ops
 from transformers.models.deformable_detr.configuration_deformable_detr import DeformableDetrConfig
 
 
-class ALIF(nn.Module):
-    def __init__(self, embed_dim=256, hidden_dim=512, num_heads=8):
-        super().__init__()
-        roberta_cfg = RobertaConfig(is_decoder=False, hidden_size=embed_dim, num_attention_heads=num_heads)
-        ddetr_cfg = DeformableDetrConfig(d_model=embed_dim, encoder_ffn_dim=hidden_dim, encoder_attention_heads=num_heads)
-        # self.ddetr1 = DeformableDetrEncoderLayer(ddetr_cfg)
-        # self.ddetr2 = DeformableDetrEncoderLayer(ddetr_cfg)
-        self.detr = nn.Linear(embed_dim, embed_dim)
-        self.roberta = RobertaLayer(roberta_cfg)
-        self.cross_attentions = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True)
-        self.b = nn.Parameter(torch.tensor(0.5))
-
-    def forward(self, image_embeds, text_embeds):
-        image_embeds, text_embeds = (image_embeds + self.b * self.cross_attentions(image_embeds, text_embeds, text_embeds, need_weights=False)[0],
-                                     text_embeds + self.b * self.cross_attentions(text_embeds, image_embeds, image_embeds, need_weights=False)[0])
-        # image_embeds = self.ddetr2(self.ddetr1(image_embeds))
-        image_embeds = self.detr(image_embeds)
-        text_embeds = self.roberta(text_embeds)[0]
-        return image_embeds, text_embeds
-
-
 class SGGModel(nn.Module):
-    def __init__(self, roberta_model_name="roberta-large", ddetr_model_name="SenseTime/deformable-detr",
+    def __init__(self, ddetr_model_name="SenseTime/deformable-detr",
                  embed_dim=256, hidden_dim=512, num_heads=8, N_ALIF=2, num_queries=100):
         super().__init__()
         self.num_queries = num_queries
         self.num_labels = 151
-        self.roberta_model = RobertaModel.from_pretrained(roberta_model_name)
+        self.num_rels = 51
         self.ddetr_model = DeformableDetrModel.from_pretrained(ddetr_model_name)
-        self.ddetr_model.freeze_backbone()
-        
-        for _, param in self.roberta_model.named_parameters():
-            param.requires_grad_(False)
+        # self.ddetr_model.freeze_backbone()
 
-        self.text_project = nn.Linear(self.roberta_model.config.hidden_size, embed_dim)
         self.image_project = nn.Linear(self.ddetr_model.config.hidden_size, embed_dim)
 
-        # self.ALIF = ALIF(embed_dim, 512, 8)
         self.mha = nn.MultiheadAttention(embed_dim, num_heads, dropout=0.1, batch_first=True)
         self.ffn = nn.Sequential(nn.Linear(embed_dim, hidden_dim),
                                      nn.ReLU(),
@@ -57,33 +29,29 @@ class SGGModel(nn.Module):
         self.bbox_decoder = nn.Sequential(nn.Linear(embed_dim, hidden_dim),
                                      nn.ReLU(),
                                      nn.Linear(hidden_dim, 4))
-        self.label_decoder = nn.Linear(embed_dim, embed_dim)
+        self.label_decoder = nn.Linear(embed_dim, self.num_labels)
 
-        self.entity_class_embed = nn.Linear(embed_dim * 2, embed_dim)
+        self.entity_class_embed = nn.Linear(embed_dim * 2, self.num_labels)
         self.entity_bbox_embed = nn.Sequential(nn.Linear(embed_dim * 2, hidden_dim),
                                      nn.ReLU(),
                                      nn.Linear(hidden_dim, 4))
         
         self.relation_decoder = nn.Sequential(nn.Linear(2 * embed_dim, hidden_dim),
                                      nn.ReLU(),
-                                     nn.Linear(hidden_dim, embed_dim))
+                                     nn.Linear(hidden_dim, self.num_rels))
 
-    def forward(self, nested_pixel_values, input_ids, attention_mask):
+    def forward(self, nested_pixel_values):
         batch_size = nested_pixel_values.tensors.shape[0]
         image_embeds = self.ddetr_model(pixel_values=nested_pixel_values.tensors, pixel_mask=nested_pixel_values.mask).encoder_last_hidden_state
-        text_embeds = self.roberta_model(input_ids=input_ids, attention_mask=attention_mask).pooler_output
-
-        text_embeds = self.text_project(text_embeds).repeat(batch_size, 1, 1)
-        # image_embeds, text_embeds = self.ALIF(image_embeds, text_embeds)
 
         target_embeds = self.ffn(self.mha(self.queries.repeat(batch_size,1,1), image_embeds, image_embeds, need_weights=False)[0])
         target_bbox = self.bbox_decoder(target_embeds).sigmoid()
-        target_label_logit = self.label_decoder(target_embeds) @ text_embeds[:, :self.num_labels, :].transpose(1, 2)  # 前半部分是实体
+        target_label_logit = self.label_decoder(target_embeds)
 
         couple_embeds = torch.concat((target_embeds[:, :self.num_queries, :], target_embeds[:, self.num_queries:, :]), dim=-1)  # half of targets are subjects while others are objects
-        relation_logit = self.relation_decoder(couple_embeds) @ text_embeds[:, self.num_labels:, :].transpose(1, 2)  # 后半部分是关系
+        relation_logit = self.relation_decoder(couple_embeds)
 
-        pred_logits = self.entity_class_embed(couple_embeds) @ text_embeds[:, :self.num_labels, :].transpose(1, 2)
+        pred_logits = self.entity_class_embed(couple_embeds)
         pred_boxes = self.entity_bbox_embed(couple_embeds).sigmoid()
 
         out = {'pred_logits': pred_logits, 'pred_boxes': pred_boxes,
@@ -97,33 +65,33 @@ class SGGModel(nn.Module):
 
         return out
     
-    def evaluate(self, outputs, targets, matcher=None, recall_all=[0, 0, 0], topk=[20, 50, 100]):
-        entity_indices, rel_indices, _, _= matcher(outputs, targets)
-        pred_rel = outputs['rel_logits'].argmax(-1)
-        pred_sub = outputs['sub_logits'].argmax(-1)
-        pred_obj = outputs['obj_logits'].argmax(-1)
-        pred_sub_box = outputs['sub_boxes']
-        pred_obj_box = outputs['obj_boxes']
+    # def evaluate(self, outputs, targets, matcher=None, recall_all=[0, 0, 0], topk=[20, 50, 100]):
+    #     entity_indices, rel_indices, _, _= matcher(outputs, targets)
+    #     pred_rel = outputs['rel_logits'].argmax(-1)
+    #     pred_sub = outputs['sub_logits'].argmax(-1)
+    #     pred_obj = outputs['obj_logits'].argmax(-1)
+    #     pred_sub_box = outputs['sub_boxes']
+    #     pred_obj_box = outputs['obj_boxes']
 
-        for i, rel_index in enumerate(rel_indices):
-            target = targets[i]
-            pred_rel_index, gt_rel_index = rel_index
-            gt_rel_annotations = target['rel_annotations'][gt_rel_index]
-            sub_label = (target['labels'][gt_rel_annotations[:, 0]] == pred_sub[i][pred_rel_index]).to('cpu')
-            obj_label = (target['labels'][gt_rel_annotations[:, 1]] == pred_obj[i][pred_rel_index]).to('cpu')
-            # sub_box = (target['boxes'][gt_rel_annotations[:, 0]] == pred_sub_box[i][pred_rel_index])
-            # obj_box = (target['boxes'][gt_rel_annotations[:, 1]] == pred_obj_box[i][pred_rel_index])
-            sub_box, _ = box_ops.box_iou(box_ops.box_cxcywh_to_xyxy(target['boxes'][gt_rel_annotations[:, 0]]),
-                                          box_ops.box_cxcywh_to_xyxy(pred_sub_box[i][pred_rel_index]))
-            obj_box, _ = box_ops.box_iou(box_ops.box_cxcywh_to_xyxy(target['boxes'][gt_rel_annotations[:, 1]]),
-                                          box_ops.box_cxcywh_to_xyxy(pred_obj_box[i][pred_rel_index]))
-            sub_box = (sub_box >= 0.5).squeeze(0).to('cpu')
-            obj_box = (obj_box >= 0.5).squeeze(0).to('cpu')
-            rel_label = (gt_rel_annotations[:, 2] == pred_rel[i][pred_rel_index]).to('cpu')
-            result = logical_ands((sub_label, obj_label, sub_box, obj_box, rel_label))
-            for i in range(len(topk)):
-                recall_all[i] += (result[: topk[i]] == True).sum() / len(gt_rel_annotations)
-        return recall_all
+    #     for i, rel_index in enumerate(rel_indices):
+    #         target = targets[i]
+    #         pred_rel_index, gt_rel_index = rel_index
+    #         gt_rel_annotations = target['rel_annotations'][gt_rel_index]
+    #         sub_label = (target['labels'][gt_rel_annotations[:, 0]] == pred_sub[i][pred_rel_index]).to('cpu')
+    #         obj_label = (target['labels'][gt_rel_annotations[:, 1]] == pred_obj[i][pred_rel_index]).to('cpu')
+    #         # sub_box = (target['boxes'][gt_rel_annotations[:, 0]] == pred_sub_box[i][pred_rel_index])
+    #         # obj_box = (target['boxes'][gt_rel_annotations[:, 1]] == pred_obj_box[i][pred_rel_index])
+    #         sub_box, _ = box_ops.box_iou(box_ops.box_cxcywh_to_xyxy(target['boxes'][gt_rel_annotations[:, 0]]),
+    #                                       box_ops.box_cxcywh_to_xyxy(pred_sub_box[i][pred_rel_index]))
+    #         obj_box, _ = box_ops.box_iou(box_ops.box_cxcywh_to_xyxy(target['boxes'][gt_rel_annotations[:, 1]]),
+    #                                       box_ops.box_cxcywh_to_xyxy(pred_obj_box[i][pred_rel_index]))
+    #         sub_box = (sub_box >= 0.5).squeeze(0).to('cpu')
+    #         obj_box = (obj_box >= 0.5).squeeze(0).to('cpu')
+    #         rel_label = (gt_rel_annotations[:, 2] == pred_rel[i][pred_rel_index]).to('cpu')
+    #         result = logical_ands((sub_label, obj_label, sub_box, obj_box, rel_label))
+    #         for i in range(len(topk)):
+    #             recall_all[i] += (result[: topk[i]] == True).sum() / len(gt_rel_annotations)
+    #     return recall_all
     
 
 def logical_ands(and_list):  # extend torch.logical_and to more than two inputs

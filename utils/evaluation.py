@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 
 @torch.no_grad()
-def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, dataset_name, tokenized_text):
+def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, dataset_name):
     model.eval()
     criterion.eval()
 
@@ -34,7 +34,7 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, dat
             samples = samples.to(device)
             targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
-            outputs = model(samples, tokenized_text['input_ids'], tokenized_text['attention_mask'])
+            outputs = model(samples)
             loss_dict = criterion(outputs, targets)
             weight_dict = criterion.weight_dict
 
@@ -61,7 +61,7 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, dat
             
             if i % 20 == 0:
                 _tqdm.set_postfix(**ave_result_dict)
-            _tqdm.update(1)
+                _tqdm.update(20)
 
     if dataset_name == 'vg':
         evaluator['sgdet'].print_stats()

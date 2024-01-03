@@ -39,22 +39,15 @@ set_seed(621)
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 image_model = "/home/wjw/checkpoints/weight/deformable-detr/"
-text_model = "/home/wjw/checkpoints/weight/roberta-base/"
 
 idx_to_label, idx_to_predicate, label_list, predicate_list = load_vg_dict('/home/wjw/data/VG/VG-SGG-dicts-with-attri.json')
 processor = AutoImageProcessor.from_pretrained(image_model)
-tokenizer = AutoTokenizer.from_pretrained(text_model)
-model = SGGModel(roberta_model_name=text_model, ddetr_model_name=image_model,
+model = SGGModel(ddetr_model_name=image_model,
                  embed_dim=256, hidden_dim=256, num_heads=4, N_ALIF=2, num_queries=100).to(device)
 
-tokenized_text = tokenizer(label_list + predicate_list, padding='max_length', max_length=8)
-tokenized_text = {k: torch.tensor(v).to(device) for k, v in tokenized_text.items()}
-
-# dataset = load_data(dataset_name, path='/home/wjw/data/')
-# dataset = dataset['train'].train_test_split(test_size=0.3)  ######## 
 
 dataset_train = build_dataset('train', dataset_name, '/home/wjw/data/VG/', '/home/wjw/data/VG/VG_100K/')
-dataset_val = build_dataset('test', dataset_name, '/home/wjw/data/VG/', '/home/wjw/data/VG/VG_100K/')
+dataset_val = build_dataset('val', dataset_name, '/home/wjw/data/VG/', '/home/wjw/data/VG/VG_100K/')
 base_ds = get_coco_api_from_dataset(dataset_val)
 
 train_dataloader = DataLoader(dataset_train, batch_size=2, shuffle=True, collate_fn=collate_fn)
@@ -71,12 +64,13 @@ total_epoch = 20
 
 for epoch in range(total_epoch):
     model.train()
+    criterion.train()
+    
     with tqdm(total=len(train_dataloader)) as _tqdm:
         _tqdm.set_description('epoch: {}/{}'.format(epoch + 1, total_epoch))
         mean_loss = 0
         for num, batch in enumerate(train_dataloader):
-            inputs = {'nested_pixel_values': batch[0].to(device), 
-                      'input_ids': tokenized_text['input_ids'], 'attention_mask': tokenized_text['attention_mask']}
+            inputs = {'nested_pixel_values': batch[0].to(device)}
             
             optimizer.zero_grad()
             outputs = model(**inputs)
@@ -88,14 +82,14 @@ for epoch in range(total_epoch):
             optimizer.step()
 
             mean_loss += loss.item()
-            if num % 10 == 0:
+            if num % 20 == 0:
                 _tqdm.set_postfix(loss='{:.4f}'.format(loss.item()), mean_loss='{:.4f}'.format(mean_loss/(num+1)))
-            _tqdm.update(1)
+                _tqdm.update(20)
     
-    torch.save(model, "/home/wjw/checkpoints/model.pt")
+    torch.save(model, "/home/wjw/checkpoints/model_without_roberta.pt")
         
     if epoch % 3 == 0 or epoch == total_epoch-1:
         print('########## START TEST ##########')
-        evaluate(model, criterion, postprocessors, val_dataloader, base_ds, device, dataset_name, tokenized_text)
+        evaluate(model, criterion, postprocessors, val_dataloader, base_ds, device, dataset_name)
 
 
