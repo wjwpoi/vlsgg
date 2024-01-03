@@ -134,14 +134,14 @@ class HungarianMatcher(nn.Module):
 
         # assignment strategy to avoid assigning <background-no_relationship-background > to some good predictions
         sub_weight = torch.ones((bs, num_queries_rel)).to(out_prob.device)
-        good_sub_detection = torch.logical_and((outputs["sub_logits"].flatten(0, 1)[:, 0:].argmax(-1)[:, None] == tgt_ids),
+        good_sub_detection = torch.logical_and((outputs["sub_logits"].flatten(0, 1).argmax(-1)[:, None] == tgt_ids),
                                                (box_iou(box_cxcywh_to_xyxy(sub_bbox), box_cxcywh_to_xyxy(tgt_bbox))[0] >= self.iou_threshold))
         for i, c in enumerate(good_sub_detection.split(sizes, -1)):
             sub_weight[i, c.sum(-1)[i*num_queries_rel:(i+1)*num_queries_rel].to(torch.bool)] = 0
             sub_weight[i, indices1[i][0]] = 1
 
         obj_weight = torch.ones((bs, num_queries_rel)).to(out_prob.device)
-        good_obj_detection = torch.logical_and((outputs["obj_logits"].flatten(0, 1)[:, 0:].argmax(-1)[:, None] == tgt_ids),
+        good_obj_detection = torch.logical_and((outputs["obj_logits"].flatten(0, 1).argmax(-1)[:, None] == tgt_ids),
                                                (box_iou(box_cxcywh_to_xyxy(obj_bbox), box_cxcywh_to_xyxy(tgt_bbox))[0] >= self.iou_threshold))
         for i, c in enumerate(good_obj_detection.split(sizes, -1)):
             obj_weight[i, c.sum(-1)[i*num_queries_rel:(i+1)*num_queries_rel].to(torch.bool)] = 0

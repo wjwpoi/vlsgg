@@ -157,8 +157,6 @@ class SetCriterion(nn.Module):
         self.weight_dict = weight_dict
         self.eos_coef = eos_coef
         self.losses = losses
-        # empty_weight = torch.ones(self.num_classes + 1)
-        # empty_weight[-1] = self.eos_coef
         empty_weight = torch.ones(self.num_classes)
         empty_weight[0] = self.eos_coef
         self.register_buffer('empty_weight', empty_weight)
@@ -216,8 +214,8 @@ class SetCriterion(nn.Module):
         pred_logits = outputs['rel_logits']
         device = pred_logits.device
         tgt_lengths = torch.as_tensor([len(v["rel_annotations"]) for v in targets], device=device)
-        # Count the number of predictions that are NOT "no-object" (which is the last class)
-        card_pred = (pred_logits.argmax(-1) != pred_logits.shape[-1] - 1).sum(1)
+        # Count the number of predictions that are NOT "no-object" (which is the first class)
+        card_pred = (pred_logits.argmax(-1) != 0).sum(1)
         card_err = F.l1_loss(card_pred.float(), tgt_lengths.float())
         losses = {'cardinality_error': card_err}
         return losses
