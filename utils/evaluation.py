@@ -61,7 +61,7 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, dat
             
             if i % 20 == 0:
                 _tqdm.set_postfix(**ave_result_dict)
-            _tqdm.update(1)
+                _tqdm.update(20)
 
     if dataset_name == 'vg':
         evaluator['sgdet'].print_stats()

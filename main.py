@@ -88,13 +88,13 @@ for epoch in range(total_epoch):
             optimizer.step()
 
             mean_loss += loss.item()
-            if num % 10 == 0:
+            if num % 20 == 0:
                 _tqdm.set_postfix(loss='{:.4f}'.format(loss.item()), mean_loss='{:.4f}'.format(mean_loss/(num+1)))
-            _tqdm.update(1)
+                _tqdm.update(20)
     
     torch.save(model, "/home/wjw/checkpoints/model.pt")
         
-    if epoch % 3 == 0 or epoch == total_epoch-1:
+    if epoch % 3 == 0 or epoch == total_epoch - 1:
         print('########## START TEST ##########')
         evaluate(model, criterion, postprocessors, val_dataloader, base_ds, device, dataset_name, tokenized_text)
 
